@@ -1,21 +1,23 @@
-module Ticketing where
+module Ticketing exposing (main)
 
-import Html
-import Html.Attributes exposing (class)
+import Basics.Extra exposing (..)
+import Html exposing (..)
+import Html.Attributes exposing (..)
+import Html.App as Html
 import Http
 import Json.Decode exposing ((:=))
 import Pagination exposing (Paginated, Page)
+import Platform.Cmd exposing (Cmd, batch)
+import Process
 import Task
 import Time
 
-import Effects
-import StartApp
+githubOrg = "concourse"
+githubUser = "concourse"
 
-app = StartApp.start { init = init, view = view, update = update, inputs = [] }
-main = app.html
-
-port tasks : Signal (Task.Task Effects.Never ())
-port tasks = app.tasks
+main =
+  Html.program
+    { init = init, update = update, view = view, subscriptions = \_ -> Sub.none }
 
 type alias Model =
   { repos : Maybe (List Repo)
@@ -28,11 +30,11 @@ type alias Repo =
   , openIssues : Int
   }
 
-type Action
+type Msg
   = ReposFetched (Result Http.Error (Paginated Repo))
   | PullRequestsFetched (Result Http.Error Int)
 
-init : (Model, Effects.Effects Action)
+init : (Model, Cmd Msg)
 init =
   let
     model =
@@ -41,10 +43,10 @@ init =
       , openPullRequests = Nothing
       }
   in
-    (model, Effects.batch [fetchRepos 0 Nothing, fetchPRs 0])
+    (model, batch [fetchRepos 0 Nothing, fetchPRs 0])
 
-view : Signal.Address Action -> Model -> Html.Html
-view address model =
+view : Model -> Html Msg
+view model =
   case (model.repos, model.openPullRequests) of
     (Just repos, Just prCount) ->
       let
@@ -59,7 +61,7 @@ view address model =
     (_, _) ->
       Html.text "Loading..."
 
-viewBox : Int -> String -> Html.Html
+viewBox : Int -> String -> Html Msg
 viewBox count noun =
   Html.div [class "box"]
     [ Html.div [class "count"]
@@ -68,7 +70,7 @@ viewBox count noun =
       [ Html.text noun ]
     ]
 
-update : Action -> Model -> (Model, Effects.Effects Action)
+update : Msg -> Model -> (Model, Cmd Msg)
 update action model =
   case action of
     ReposFetched (Ok repos) ->
@@ -86,7 +88,7 @@ update action model =
 repollInterval : Time.Time
 repollInterval = 5 * Time.minute
 
-handleReposFetched : Paginated Repo -> Model -> (Model, Effects.Effects Action)
+handleReposFetched : Paginated Repo -> Model -> (Model, Cmd Msg)
 handleReposFetched repoPage model =
   let
     repos = List.append (Maybe.withDefault [] model.currentRepos) repoPage.content
@@ -98,19 +100,18 @@ handleReposFetched repoPage model =
       Just page ->
         ( { model | currentRepos = Just repos }, fetchRepos 0 (Just page))
 
-handlePRsFetched : Int -> Model -> (Model, Effects.Effects Action)
+handlePRsFetched : Int -> Model -> (Model, Cmd Msg)
 handlePRsFetched count model =
   ( { model | openPullRequests = Just count } , fetchPRs repollInterval)
 
-fetchRepos : Time.Time -> Maybe Page -> Effects.Effects Action
+fetchRepos : Time.Time -> Maybe Page -> Cmd Msg
 fetchRepos delay page =
   let
-    url = "https://api.github.com/orgs/concourse/repos"
+    url = "https://api.github.com/orgs/" ++ githubOrg ++ "/repos"
   in
-    (Task.sleep delay `Task.andThen` (always <| Pagination.fetch decodeRepo url page))
+    (Process.sleep delay `Task.andThen` (always <| Pagination.fetch decodeRepo url page))
       |> Task.toResult
-      |> Task.map ReposFetched
-      |> Effects.task
+      |> Task.perform never ReposFetched
 
 decodeRepo : Json.Decode.Decoder Repo
 decodeRepo = Json.Decode.object2 Repo
@@ -120,11 +121,11 @@ decodeRepo = Json.Decode.object2 Repo
 decodeResults : Json.Decode.Decoder Int
 decodeResults = ("total_count" := Json.Decode.int)
 
-fetchPRs : Time.Time -> Effects.Effects Action
+fetchPRs : Time.Time -> Cmd Msg
 fetchPRs delay =
   let
     url =
-      "https://api.github.com/search/issues?q=user:concourse+state:open+type:pr"
+      "https://api.github.com/search/issues?q=user:" ++ githubUser ++ "+state:open+type:pr"
     get =
       Http.send
         Http.defaultSettings
@@ -134,10 +135,9 @@ fetchPRs delay =
         , body = Http.empty
         }
   in
-    (Task.sleep delay `Task.andThen` (\x -> Task.mapError promoteHttpError get) `Task.andThen` parsePRs decodeResults)
+    (Process.sleep delay `Task.andThen` (\x -> Task.mapError promoteHttpError get) `Task.andThen` parsePRs decodeResults)
       |> Task.toResult
-      |> Task.map PullRequestsFetched
-      |> Effects.task
+      |> Task.perform never PullRequestsFetched
 
 promoteHttpError : Http.RawError -> Http.Error
 promoteHttpError rawError =
