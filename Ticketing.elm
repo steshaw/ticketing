@@ -1,5 +1,7 @@
 module Ticketing exposing (main)
 
+import Token exposing (githubToken)
+
 import Basics.Extra exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -130,7 +132,7 @@ fetchPRs delay =
       Http.send
         Http.defaultSettings
         { verb = "GET"
-        , headers = [("Authorization", "token TOKEN-GOES-HERE")]
+        , headers = [("Authorization", "token " ++ githubToken)]
         , url = url
         , body = Http.empty
         }

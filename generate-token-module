@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+cat >Token.elm <<!
+module Token exposing (githubToken)
+
+githubToken = "$(cat github-token)"
+!

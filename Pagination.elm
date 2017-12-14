@@ -1,5 +1,7 @@
 module Pagination exposing (Paginated, Pagination, Page, Direction(..), fetch, parseLinks)
 
+import Token exposing (githubToken)
+
 import Dict exposing (Dict)
 import Http
 import Json.Decode
@@ -40,7 +42,7 @@ fetch decode url page =
       Http.send
         Http.defaultSettings
         { verb = "GET"
-        , headers = [("Authorization", "token TOKEN-GOES-HERE")]
+        , headers = [("Authorization", "token " ++ githubToken)]
         , url = addParams url page
         , body = Http.empty
         }
