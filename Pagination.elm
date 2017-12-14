@@ -1,8 +1,11 @@
 module Pagination exposing (Paginated, Pagination, Page, Direction(..), fetch, parseLinks)
 
+import Debug
+
 import Token exposing (githubToken)
 
 import Dict exposing (Dict)
+import Dict.Extra
 import Http
 import Json.Decode
 import Regex exposing (Regex)
@@ -87,14 +90,14 @@ promoteHttpError rawError =
 
 parseLinks : Http.Response -> Pagination
 parseLinks response =
-  case Dict.get "Link" response.headers of
+  case Dict.get "link" (Dict.Extra.mapKeys String.toLower response.headers) of
     Nothing ->
       Pagination Nothing Nothing
 
     Just commaSeparatedCraziness ->
       let
-        headers = String.split ", " commaSeparatedCraziness
-        parsed = Dict.fromList <| List.filterMap parseLinkTuple headers
+        headers = Debug.log "headers" (String.split ", " commaSeparatedCraziness)
+        parsed = Debug.log "parsed" (Dict.fromList <| List.filterMap parseLinkTuple headers)
       in
         Pagination
           (Dict.get previousRel parsed `Maybe.andThen` parseParams)
